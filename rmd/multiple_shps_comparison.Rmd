@@ -1,5 +1,5 @@
 ---
-title: "Taxonomomy Validation Visualizations, EPA Smart Growth Assessment"
+title: "Taxonomomy Validation Visualizations, Comparing systems"
 author: "Joe Skufca"
 date:  "2022-05-17"
 output: html_notebook
@@ -29,7 +29,7 @@ Currently, we are considering 3 systems - EPA Smart Growth, Climate Smart Commun
 ```{r}
 filelist=list(epa=here("data","taxonomy_epa_sga.xlsx"),
               csc=here("data","taxonomy_csc.xlsx"),
-              lfr= here("data","20220119 SHPS Taxonomy - Template & Scoring - All In.xlsx"))
+              lfc= here("data","20220119 SHPS Taxonomy - Template & Scoring - All In.xlsx"))
 ```
 
 We construct a helper functions to read each file:
@@ -99,11 +99,14 @@ df2 %>% select(dimension,rater,response) %>%
 ```
 ### histogram clusters with extend
 ```{r}
-epa.dist=dfC %>% filter(shps=="epa") %>% remove_rownames()  %>% select(where(is.numeric)) %>% dist()
+epa.dist=df3_2 %>% filter(shps=="epa")%>%   column_to_rownames("dimension") %>%
+     select(where(is.numeric)) %>% dist()
 
-lfc.dist=dfC %>% filter(shps=="lfr")%>% remove_rownames() %>% select(where(is.numeric)) %>% dist()
+lfc.dist=df3_2 %>% filter(shps=="lfc")%>% column_to_rownames("dimension") %>%
+     select(where(is.numeric)) %>% dist()
 
-csc.dist=dfC %>% filter(shps=="csc")%>% remove_rownames() %>% select(where(is.numeric)) %>% dist()
+csc.dist=df3_2 %>% filter(shps=="csc")%>% column_to_rownames("dimension") %>%
+     select(where(is.numeric)) %>% dist()
 ```
 
 ```{r}
@@ -113,14 +116,14 @@ csc.hc=hclust(csc.dist)
 ```
 
 ```{r}
-epa=hclust(epa.dist) %>% as.dendrogram()
-lfc=hclust(lfc.dist)%>% as.dendrogram()
-csc=hclust(csc.dist)%>% as.dendrogram()
+epa=epa.hc %>% as.dendrogram()
+lfc=lfc.hc %>% as.dendrogram()
+csc=csc.hc %>% as.dendrogram()
 ```
 
 ```{r}
-dendlist(csc, lfc) %>%
-  untangle(method = "step1side") %>% # Find the best alignment layout
+dendlist(lfc, csc,epa) %>%
+  untangle(method = "step2side") %>% # Find the best alignment layout
   tanglegram()                       # Draw the two dendrograms
 ```
 
