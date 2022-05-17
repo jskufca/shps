@@ -1,0 +1,262 @@
+---
+title: "Taxonomomy Validation Visualizations"
+author: "Joe Skufca"
+date:  "2022-01-26"
+output: html_notebook
+---
+
+Preliminar visualiations of taxonomy usage attempts by the team to work towards validating the vehicle. 
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(here)
+library(lubridate)
+library(readxl)
+# dealing with text
+library(textclean)
+library(tm)
+library(SnowballC)
+library(stringr)
+# topic model
+library(tidytext)
+library(topicmodels)
+library(textmineR)
+library(wordcloud)
+```
+
+## Load data
+
+First usage of template performed by the group is aggregated into a single excel file, with each individual rater using the template, with their ratings recorded on a different sheet in an excel file.
+
+```{r}
+filename=here("data","20220119 SHPS Taxonomy - Template & Scoring - All In.xlsx")
+```
+
+The file is quite complicated.  Let's understand that file.
+
+```{r}
+sheets=excel_sheets(filename)
+```
+
+Let's try to read a particular sheet correctly:
+
+```{r}
+this_person=sheets[1]
+read_sheet=function(this_person){
+df1=read_excel(filename,sheet=this_person, 
+               range = "C9:I28",col_names = FALSE) %>%
+     select(1,3,4,6,7) %>% 
+     rename(dimension=...1,
+            response=...3,
+            resp_indicator=...4,
+            degree_best=...6,
+            degree_indicator=...7) %>% drop_na(dimension) %>%
+     mutate(rater=this_person) 
+}
+
+df2=map_dfr(sheets[c(1:3,5,6)],read_sheet) %>%
+     mutate(response=factor(response,
+                            levels = c("No","Yes - Could/Should","Yes - Must/Required")))
+
+
+
+```
+
+```{r}
+# build textcleaner function
+textcleaner <- function(x){
+  x <- as.character(x)
+  
+  x <- x %>%
+    str_to_lower() %>%  # convert all the string to low alphabet
+    replace_contraction() %>% # replace contraction to their multi-word forms
+    replace_internet_slang() %>% # replace internet slang to normal words
+    replace_emoji() %>% # replace emoji to words
+    replace_emoticon() %>% # replace emoticon to words
+    replace_hash(replacement = "") %>% # remove hashtag
+    replace_word_elongation() %>% # replace informal writing with known semantic replacements
+    replace_number(remove = T) %>% # remove number
+    replace_date(replacement = "") %>% # remove date
+    replace_time(replacement = "") %>% # remove time
+    str_remove_all(pattern = "[[:punct:]]") %>% # remove punctuation
+    str_remove_all(pattern = "[^\\s]*[0-9][^\\s]*") %>% # remove mixed string n number
+    str_squish() %>% # reduces repeated whitespace inside a string.
+    str_trim() # removes whitespace from start and end of string
+  
+  xdtm <- VCorpus(VectorSource(x)) %>%
+    tm_map(removeWords, stopwords("en"))
+  
+  # convert corpus to document term matrix
+  return(DocumentTermMatrix(xdtm))
+    
+}
+```
+
+#### Manipulate dataset to collect all text for each reviewer
+
+```{r}
+
+df3= df2 %>% 
+     select(rater,resp_indicator,degree_indicator) %>% 
+     unite(2:3,col="words",sep=" ") %>% 
+     group_by(rater) %>%
+     summarise(text=glue_collapse(words))
+
+```
+
+### Let's build a first topic model
+
+```{r}
+words1=textcleaner(df3$text)
+
+freqterm1 <- findFreqTerms(words1,3)
+```
+
+Subsetting
+```{r}
+words1b=words1[,freqterm1]
+
+rownum=apply(words1b,1,sum)
+
+words1b=words1b[rownum>0,]
+```
+
+Apply LDA with k=2
+
+```{r}
+lda1=LDA(words1b,k=2,control = list(seed = 1502))
+
+#tidy the result
+
+topic1=tidy(lda1,matrix="beta")
+```
+
+```{r}
+top_terms_1 <- topic1 %>%
+  group_by(topic) %>%
+  top_n(10,beta) %>% 
+  ungroup() %>%
+  arrange(topic,-beta)
+```
+
+Plot topic words
+
+```{r}
+p1 <- top_terms_1 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+p1
+
+```
+
+```{r}
+tdm=as.TermDocumentMatrix(words1b)
+m=as.matrix(tdm)
+v = sort(rowSums(m), decreasing = TRUE)
+d = tibble(word = names(v), freq = v)
+head(d, 10)
+```
+
+```{r}
+wordcloud(words = d$word,
+		freq = d$freq,
+		min.freq = 5,
+		random.order = FALSE,
+		rot.per = 0.35,
+		colors = brewer.pal(8, "Dark2"))
+
+```
+
+```{r}
+d %>% slice_head(n=10) %>% ggplot(aes(x=freq,y=fct_reorder(word,freq)))+geom_col()+
+     theme_minimal()+ylab("word")+
+     ggtitle("Word frequency usage in Leed for community scoring remarks")
+```
+
+### Quad Charts
+
+I loaded the data into an excel file, multiple rows per rater, 3 columns, for quads 2-4, ignoring the title, sincle all were the same.
+```{r}
+
+dfq=read_excel(here("data","lfc_one_page_agg.xlsx")) %>% rename(rater=evaluator)
+
+```
+
+Let's collapse, as before, to simplify.
+
+```{r}
+dfq3= dfq %>% 
+     unite(2:4,col="words",sep=" ") %>% 
+     group_by(rater) %>%
+     summarise(text=glue_collapse(words))
+```
+
+Perform text cleaning and build document-term matrix
+```{r}
+words1q=textcleaner(dfq3$text)
+
+freqterm1q <- findFreqTerms(words1q,3)
+```
+
+Subsetting
+```{r}
+words1qb=words1q[,freqterm1q]
+
+rownum_q=apply(words1qb,1,sum)
+
+words1qb=words1qb[rownum>0,]
+
+vq=words1qb %>% as.TermDocumentMatrix() %>% as.matrix() %>% 
+     rowSums() %>% sort(,decreasing=TRUE)
+
+dq=tibble(word = names(vq), freq = vq)
+
+dq %>% slice_head(n=10) %>% ggplot(aes(x=freq,y=fct_reorder(word,freq)))+geom_col()+
+     theme_minimal()+ylab("word")+
+     ggtitle("Word frequency LfC quad Chart")
+
+
+
+```
+
+###
+Apply LDA with k=3
+
+```{r}
+lda2=LDA(words1q,k=4,control = list(seed = 1502))
+
+#tidy the result
+
+topic2=tidy(lda2,matrix="beta")
+```
+
+```{r}
+top_terms_2 <- topic2 %>%
+  group_by(topic) %>%
+  top_n(10,beta) %>% 
+  ungroup() %>%
+  arrange(topic,-beta)
+```
+
+Plot topic words
+
+```{r}
+p2 <- top_terms_2 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+p2
+
+```

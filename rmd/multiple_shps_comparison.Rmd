@@ -1,0 +1,126 @@
+---
+title: "Taxonomomy Validation Visualizations, EPA Smart Growth Assessment"
+author: "Joe Skufca"
+date:  "2022-05-17"
+output: html_notebook
+---
+
+Preliminar visualiations of taxonomy usage attempts by the team to work towards validating the vehicle, analyzing *EPA Smart Growth Assessment.*
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(here)
+library(plotly)
+library(readxl)
+library(heatmaply)
+library("dendextend")
+```
+
+## Load data
+
+First usage of template performed by the group is aggregated into a single excel file, with each individual rater using the template, with their ratings recorded on a different sheet in an excel file.  Processing will be identical for each file (SHPS System) under consideration.
+
+Currently, we are considering 3 systems - EPA Smart Growth, Climate Smart Communities, and LEED for Communities.
+
+
+```{r}
+filelist=list(epa=here("data","taxonomy_epa_sga.xlsx"),
+              csc=here("data","taxonomy_csc.xlsx"),
+              lfr= here("data","20220119 SHPS Taxonomy - Template & Scoring - All In.xlsx"))
+```
+
+We construct a helper functions to read each file:
+
+```{r}
+
+read_sheet=function(filename,this_person){
+df1=suppressMessages(read_excel(filename,sheet=this_person, 
+               range = "C9:I28",col_names = FALSE)) %>%
+     select(1,3,4,6,7) %>% 
+     rename(dimension=...1,
+            response=...3,
+            resp_indicator=...4,
+            degree_best=...6,
+            degree_indicator=...7) %>% drop_na(dimension) %>%
+     mutate(rater=this_person) 
+}
+
+
+read_shps_tax=function(filename){
+     sheets=excel_sheets(filename)
+     shps_name=names(filename)
+     
+          df2=map_dfr(sheets[c(1:2,4,5,6)],~ read_sheet(filename,.x)) %>%
+     mutate(response=factor(response,
+                            levels = c("No","Yes - Could/Should","Yes - Must/Required")),
+            shps=shps_name)
+     
+}
+
+df2=(read_shps_tax(unlist(filelist[1])))
+
+dfC=map_dfr(filelist,read_shps_tax,.id="shps") %>% filter(rater!="Joe")
+
+
+dfC2= dfC %>% group_by(shps) %>% nest()
+```
+
+
+
+
+```{r}
+df3=df2 %>% select(dimension,rater,degree_best) %>%
+     pivot_wider(names_from = rater,values_from = degree_best)
+
+
+
+df3_2=dfC %>% select(shps,dimension,rater,response,degree_best) %>%
+     pivot_wider(names_from = rater,values_from = c(response,degree_best))
+```
+
+```{r}
+
+df3 %>%  
+     heatmaply::heatmaply(labRow=.$dimension,
+                                      main = "EPA Smart Growth, Degree of Best PracticsS")
+```
+
+```{r}
+
+
+df2 %>% select(dimension,rater,response) %>% 
+     mutate(response=as.numeric(response)) %>%
+     pivot_wider(names_from = rater,values_from = response) %>%
+     select(-dimension) %>% heatmaply(x=.,labRow=df3$dimension,
+                                      main = "EPA Smart Growth, Response")
+```
+### histogram clusters with extend
+```{r}
+epa.dist=dfC %>% filter(shps=="epa") %>% remove_rownames()  %>% select(where(is.numeric)) %>% dist()
+
+lfc.dist=dfC %>% filter(shps=="lfr")%>% remove_rownames() %>% select(where(is.numeric)) %>% dist()
+
+csc.dist=dfC %>% filter(shps=="csc")%>% remove_rownames() %>% select(where(is.numeric)) %>% dist()
+```
+
+```{r}
+epa.hc=hclust(epa.dist)
+lfc.hc=hclust(lfc.dist)
+csc.hc=hclust(csc.dist)
+```
+
+```{r}
+epa=hclust(epa.dist) %>% as.dendrogram()
+lfc=hclust(lfc.dist)%>% as.dendrogram()
+csc=hclust(csc.dist)%>% as.dendrogram()
+```
+
+```{r}
+dendlist(csc, lfc) %>%
+  untangle(method = "step1side") %>% # Find the best alignment layout
+  tanglegram()                       # Draw the two dendrograms
+```
+
