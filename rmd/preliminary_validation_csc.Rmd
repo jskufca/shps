@@ -36,6 +36,7 @@ Let's try to read a particular sheet correctly:
 ```{r}
 this_person=sheets[1]
 read_sheet=function(this_person){
+     shps=rep(c("sustainable","holistic","planning","systems"),times=c(4,5,4,4))
 df1=read_excel(filename,sheet=this_person, 
                range = "C9:I28",col_names = FALSE) %>%
      select(1,3,4,6,7) %>% 
@@ -44,7 +45,7 @@ df1=read_excel(filename,sheet=this_person,
             resp_indicator=...4,
             degree_best=...6,
             degree_indicator=...7) %>% drop_na(dimension) %>%
-     mutate(rater=this_person) 
+     mutate(rater=this_person,shps=shps) 
 }
 
 df2=map_dfr(sheets[c(1:2,4,5,6)],read_sheet) %>%
@@ -67,8 +68,9 @@ df3=df2 %>% select(dimension,rater,degree_best) %>%
 ```{r}
 library(heatmaply)
 df3 %>% select(-dimension) %>% 
-     heatmaply::heatmaply(labRow=df3$dimension,
-                                      main = "Climate Smart Community, Degree of Best Practices")
+     heatmaply::heatmaply(x=.,labRow=df3$dimension,cellnote=.,dendrogram="none",
+                          plot_method = "plotly",
+                          main = "Climate Smart Community, Degree of Best Practices")
 ```
 
 ```{r}
@@ -78,8 +80,34 @@ df4=df2 %>% select(dimension,rater,response) %>%
 df2 %>% select(dimension,rater,response) %>% 
      mutate(response=as.numeric(response)) %>%
      pivot_wider(names_from = rater,values_from = response) %>%
-     select(-dimension) %>% heatmaply(labRow=df3$dimension,
+     select(-dimension) %>% heatmaply(x=.,labRow=df3$dimension,cellnote=.,dendrogram="none",
+                          plot_method = "plotly",
                                       main = "Climate Smart, Response")
 ```
 
+### Aggregating by shps dimension
 
+```{r}
+dfa=df2 %>% mutate(response=as.numeric(response)) %>%
+     group_by(shps,rater) %>%
+     summarise(response=mean(response),degree_best=mean(degree_best)) %>% 
+     ungroup() %>% 
+     mutate(shps=ordered(shps,levels=c("sustainable","holistic","planning","systems")))
+```
+
+```{r}
+shps=c("sustainable","holistic","planning","systems")
+dfa %>% select(shps,rater,response) %>% 
+     pivot_wider(names_from = rater,values_from = response) %>%
+     select(-shps) %>% heatmaply(x=.,labRow=shps,   cellnote=.,dendrogram="none",
+                          plot_method = "plotly",
+                                      main = "Climate Smart, Response")
+```
+```{r}
+
+dfa %>% select(shps,rater,degree_best) %>% 
+     pivot_wider(names_from = rater,values_from = degree_best) %>%
+     select(-shps) %>% heatmaply(x=.,labRow=shps,   cellnote=.,dendrogram="none",
+                          plot_method = "plotly",
+                                      main = "Climate Smart, best practices")
+```

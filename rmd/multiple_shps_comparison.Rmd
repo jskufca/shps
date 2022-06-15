@@ -127,3 +127,68 @@ dendlist(lfc, csc,epa) %>%
   tanglegram()                       # Draw the two dendrograms
 ```
 
+```{r}
+dfB=dfC %>% group_by(shps,dimension) %>% summarise(v=round(sd(degree_best),2))
+```
+
+```{r}
+dfB %>% pivot_wider(names_from = shps,values_from = v) %>%
+     select(-dimension) %>%
+     heatmaply(x=.,labRow=df3$dimension,cellnote=.,
+               main="Inter-rater variance: best practices")
+```
+
+```{r}
+dfBr=dfC %>%  mutate(response=as.numeric(response)) %>%
+     group_by(shps,dimension) %>% summarise(v=round(sd(response, na.rm = TRUE),2))
+
+dfBr %>% pivot_wider(names_from = shps,values_from = v) %>%
+     select(-dimension) %>%
+     heatmaply(x=.,labRow=df3$dimension,cellnote=.,
+               main="Inter-rater variance: Response")
+```
+
+### Let's keep everything in same order for easier comparison
+
+```{r }
+p1=dfB %>% pivot_wider(names_from = shps,values_from = v) %>%
+     select(-dimension) %>%
+     heatmaply(x=.,labRow=NULL,cellnote=.,
+               main="Inter-rater std dev: best practices",
+               dendrogram="none", 
+               coloraxis="coloraxis1",fontsize_row = 7,row_dend_left = TRUE,
+  plot_method = "plotly",colorbar_xpos=0,colorbar_thickness=13)
+
+p2=dfBr %>% pivot_wider(names_from = shps,values_from = v) %>%
+     select(-dimension) %>%
+     heatmaply(x=.,labRow=df3$dimension,cellnote=.,
+               main="Inter-rater std dev: Response",
+               dendrogram="none", coloraxis="coloraxis2",fontsize_row = 9,colorbar_ypos=.5,
+  plot_method = "plotly",colorbar_xpos=1,colorbar_thickness=13)
+
+subplot(p1,p2,margin = 0.15) %>% layout(title="Inter-rater std dev",
+                                        annotations = list( 
+  list( 
+    x = 0.2,  
+    y = 1.0,  
+    text = "Best Practices",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.8,  
+    y = 1,  
+    text = "Response",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )))
+
+
+
+```
